@@ -1,0 +1,131 @@
+entities:
+  work_order:
+    description: A formal maintenance task instruction
+    sap_table: AUFK
+    fields:
+      - name: order_id
+        type: string
+        primary_key: true
+        example: "WO-001234"
+      - name: order_type
+        type: string
+        description: "PM01=Corrective, PM02=Preventive, PM03=Predictive"
+        example: "PM02"
+      - name: priority
+        type: integer
+        description: "1=Emergency, 2=Urgent, 3=Normal, 4=Low"
+        example: 2
+      - name: status
+        type: string
+        enum: [CRTD, REL, TECO, CLSD]
+        example: "REL"
+      - name: equipment_id
+        type: string
+        foreign_key: equipment.equipment_id
+      - name: func_loc_id
+        type: string
+        foreign_key: functional_location.func_loc_id
+      - name: planned_start
+        type: datetime
+      - name: planned_end
+        type: datetime
+      - name: work_center_id
+        type: string
+        foreign_key: work_center.work_center_id
+
+  functional_location:
+    description: A point in the technical plant hierarchy
+    sap_table: IFLO
+    fields:
+      - name: func_loc_id
+        type: string
+        primary_key: true
+        example: "PLT1-AREA2-LINE3"
+      - name: description
+        type: string
+      - name: plant
+        type: string
+      - name: area
+        type: string
+      - name: parent_func_loc_id
+        type: string
+        foreign_key: functional_location.func_loc_id
+        nullable: true
+
+  equipment:
+    description: An individual physical asset
+    sap_table: EQUI
+    fields:
+      - name: equipment_id
+        type: string
+        primary_key: true
+        example: "EQ-5001"
+      - name: description
+        type: string
+      - name: func_loc_id
+        type: string
+        foreign_key: functional_location.func_loc_id
+      - name: criticality
+        type: string
+        enum: [A, B, C]
+        description: "A=Critical, B=Important, C=Standard"
+      - name: manufacturer
+        type: string
+      - name: install_date
+        type: date
+
+  work_center:
+    description: A resource group for performing maintenance
+    sap_table: CRHD
+    fields:
+      - name: work_center_id
+        type: string
+        primary_key: true
+        example: "WC-MECH-01"
+      - name: description
+        type: string
+      - name: plant
+        type: string
+      - name: capacity_hours_per_day
+        type: float
+        example: 8.0
+
+  operation:
+    description: A single task within a work order
+    sap_table: AFVC
+    fields:
+      - name: operation_id
+        type: string
+        primary_key: true
+      - name: work_order_id
+        type: string
+        foreign_key: work_order.order_id
+      - name: sequence
+        type: integer
+      - name: description
+        type: string
+      - name: duration_hours
+        type: float
+      - name: work_center_id
+        type: string
+        foreign_key: work_center.work_center_id
+
+  maintenance_plan:
+    description: A recurring schedule definition
+    sap_table: MPOS
+    fields:
+      - name: plan_id
+        type: string
+        primary_key: true
+      - name: description
+        type: string
+      - name: cycle_days
+        type: integer
+      - name: strategy
+        type: string
+      - name: call_horizon_pct
+        type: integer
+        description: "Percentage of cycle for early call"
+      - name: equipment_id
+        type: string
+        foreign_key: equipment.equipment_id
