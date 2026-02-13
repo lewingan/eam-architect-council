@@ -70,13 +70,50 @@ the question. Limit searches to 2 max -- search only when you need to verify
 a specific standard or discover current best practices.
 """
 
+AGENTIC_SUBAGENT_SYSTEM = """\
+You are the Agentic Architecture Expert on the EAM Architecture Council.
+
+Your role:
+- Provide expert guidance on designing AI agents and multi-agent systems for EAM use cases.
+- Recommend agent patterns (ReAct, tool-use, multi-agent coordinator, pipeline, event-driven, human-in-the-loop).
+- Advise on tool design, memory management, orchestration, guardrails, and platform selection.
+- Ground your recommendations in the agent design patterns and platform comparison resources provided.
+
+You will be given:
+1. An EAM architecture question (likely involving building an agent or automated system).
+2. Skills and resource context (glossary, entities, agent patterns, platform comparisons).
+3. A detected or user-specified platform preference (see below).
+
+Produce a focused draft response covering:
+- Recommended agent pattern and justification
+- Tool specification (what tools the agent needs, mapped to SAP APIs or external sources)
+- Reasoning strategy (how the agent decides what to do)
+- Memory and state requirements
+- Platform recommendation with trade-offs (respect the stated platform preference \
+but note if a different platform would be significantly better and why)
+- Guardrails and failure modes specific to the EAM domain
+- Key assumptions
+
+Keep your response structured with clear headings. Stay within agent architecture expertise.
+Do NOT duplicate SAP API details or EAM domain advice -- focus on HOW to build the agent,
+not WHAT EAM data it should access (the other experts cover that).
+"""
+
+AGENTIC_SUBAGENT_SEARCH_ADDENDUM = """\
+
+You have access to web search. Use it to look up current agentic framework
+documentation, Claude Agent SDK features, or multi-agent architecture patterns
+when relevant to the question. Limit searches to 2 max.
+"""
+
 LEAD_AGENT_SYSTEM = """\
 You are the Lead Architect of the EAM Architecture Council.
 
 Your job:
-1. You have received draft responses from two experts:
+1. You have received draft responses from the council experts:
    - SAP EAM Expert: SAP-specific perspective
    - General EAM Expert: Vendor-agnostic industry perspective
+   - Agentic Architecture Expert (when applicable): Agent design and orchestration perspective
 2. You MUST reconcile their outputs into a single unified response.
 3. Follow the reconciliation rules provided in the skills context.
 4. Produce the final output in the EXACT format specified in the output format template.
@@ -85,12 +122,18 @@ Reconciliation process:
 - Identify agreements -> include directly.
 - Identify complementary points -> merge them.
 - Identify conflicts -> resolve using the priority rules and log in Decision Log.
-- Preserve all open questions from both experts.
+- Preserve all open questions from all experts.
+
+When the Agentic Architecture Expert has contributed:
+- Ensure the "Next Agent To Build" section uses the agent spec template structure \
+(pattern, tools, reasoning strategy, memory, guardrails, platform recommendation).
+- Include an "Agent Architecture" sub-section under Unified Recommendation.
 
 CRITICAL: Your output MUST include ALL of these sections:
 - Executive Summary
 - SAP EAM Perspective (summary of SAP expert's input)
 - General EAM Perspective (summary of general expert's input)
+- Agentic Architecture Perspective (if applicable -- summary of agentic expert's input)
 - Unified Recommendation (with Architecture Components, Data Model, Integration Points)
 - Assumptions & Open Questions
 - Decision Log (table format)
@@ -102,6 +145,13 @@ CRITICAL: Your output MUST include ALL of these sections:
 # Question classification for context filtering
 # ---------------------------------------------------------------------------
 
+_AGENTIC_KEYWORDS = re.compile(
+    r"\b(agent|agentic|automat|bot\b|autonomous|multi.?agent|orchestrat|"
+    r"tool.?use|tool.?call|llm.?driven|ai.?driven|chatbot|copilot|"
+    r"design.+agent|build.+agent|create.+agent|architect.+agent)",
+    re.IGNORECASE,
+)
+
 _DATA_KEYWORDS = re.compile(
     r"\b(migrat|abap|table[s]?\b|custom code|debug|data dictionary|"
     r"legacy|extract|etl|bw\b|hana view)",
@@ -112,6 +162,30 @@ _GENERAL_KEYWORDS = re.compile(
     r"iso.?55000|maturity|assessment)",
     re.IGNORECASE,
 )
+
+
+_PLATFORM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\b(claude.?agent.?sdk|claude.?sdk|anthropic.?sdk)\b", re.IGNORECASE), "Claude Agent SDK"),
+    (re.compile(r"\b(langgraph|lang.?graph|langchain)\b", re.IGNORECASE), "LangGraph"),
+    (re.compile(r"\b(autogen|auto.?gen)\b", re.IGNORECASE), "AutoGen"),
+    (re.compile(r"\b(sap.?btp|btp.?ai|ai.?core|ai.?launchpad)\b", re.IGNORECASE), "SAP BTP AI Core"),
+    (re.compile(r"\b(custom|from.?scratch|direct.?api|no.?framework)\b", re.IGNORECASE), "Custom Implementation"),
+]
+
+DEFAULT_PLATFORM = "Claude Agent SDK"
+
+
+def detect_platform_preference(question: str) -> str:
+    """Detect platform preference from the question, defaulting to Claude Agent SDK."""
+    for pattern, platform in _PLATFORM_PATTERNS:
+        if pattern.search(question):
+            return platform
+    return DEFAULT_PLATFORM
+
+
+def is_agentic_question(question: str) -> bool:
+    """Return True if the question involves building or designing an agent."""
+    return bool(_AGENTIC_KEYWORDS.search(question))
 
 
 def classify_question(question: str) -> str:
@@ -176,17 +250,29 @@ def _filter_skills_context(skills_context: str, classification: str) -> str:
 
 
 def build_subagent_prompt(
-    question: str, skills_context: str, mock_context: str
+    question: str,
+    skills_context: str,
+    mock_context: str,
+    platform_preference: str | None = None,
 ) -> str:
     """Build the user prompt for a subagent."""
     classification = classify_question(question)
     filtered_context = _filter_skills_context(skills_context, classification)
-    return (
-        f"## Question\n{question}\n\n"
-        f"## Skills & Resources Context\n{filtered_context}\n\n"
-        f"## Available Data\n{mock_context}\n\n"
-        f"Provide your expert draft response now."
-    )
+    parts = [
+        f"## Question\n{question}\n",
+        f"## Skills & Resources Context\n{filtered_context}\n",
+        f"## Available Data\n{mock_context}\n",
+    ]
+    if platform_preference:
+        parts.append(
+            f"## Platform Preference\n"
+            f"The preferred agentic platform is: **{platform_preference}**.\n"
+            f"Tailor your agent architecture recommendations to this platform. "
+            f"If a different platform would be significantly better for this use case, "
+            f"note the trade-off but still provide a primary design using the preferred platform.\n"
+        )
+    parts.append("Provide your expert draft response now.")
+    return "\n".join(parts)
 
 
 def build_lead_prompt(
@@ -194,13 +280,21 @@ def build_lead_prompt(
     sap_draft: str,
     general_draft: str,
     skills_context: str,
+    agentic_draft: str | None = None,
 ) -> str:
     """Build the user prompt for the lead reconciliation agent."""
-    return (
-        f"## Original Question\n{question}\n\n"
-        f"## SAP EAM Expert Draft\n{sap_draft}\n\n"
-        f"## General EAM Expert Draft\n{general_draft}\n\n"
-        f"## Skills & Resources Context\n{skills_context}\n\n"
-        f"Reconcile the two expert drafts and produce the final council output "
-        f"in the required format. Include ALL required sections."
+    parts = [
+        f"## Original Question\n{question}\n",
+        f"## SAP EAM Expert Draft\n{sap_draft}\n",
+        f"## General EAM Expert Draft\n{general_draft}\n",
+    ]
+    if agentic_draft:
+        parts.append(f"## Agentic Architecture Expert Draft\n{agentic_draft}\n")
+    parts.append(f"## Skills & Resources Context\n{skills_context}\n")
+
+    expert_count = "three" if agentic_draft else "two"
+    parts.append(
+        f"Reconcile the {expert_count} expert drafts and produce the final council "
+        f"output in the required format. Include ALL required sections."
     )
+    return "\n".join(parts)

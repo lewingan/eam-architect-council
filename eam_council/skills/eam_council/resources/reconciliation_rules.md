@@ -1,6 +1,6 @@
 # Reconciliation Rules
 
-When the SAP EAM expert and General EAM expert provide conflicting or divergent advice, apply these rules:
+When the council experts (SAP EAM, General EAM, and optionally Agentic Architecture) provide conflicting or divergent advice, apply these rules:
 
 ## Priority Order
 1. **Safety & Compliance** -- Any recommendation touching regulatory compliance or safety wins by default.
@@ -15,8 +15,14 @@ When the SAP EAM expert and General EAM expert provide conflicting or divergent 
 3. Apply the priority order above.
 4. Document the chosen path AND the rejected alternative in the Decision Log with rationale.
 
+## Agentic Architecture Integration
+When the Agentic Architecture Expert has participated:
+- The agentic expert's recommendations on agent patterns, tools, memory, and guardrails take precedence for the "Next Agent To Build" section.
+- SAP and General EAM experts define WHAT the agent should do; the agentic expert defines HOW it should be built.
+- Platform recommendations from the agentic expert should be respected unless they conflict with organizational constraints noted by the other experts.
+
 ## Merge Rules
-- If both experts agree on a point, include it verbatim (deduplicated).
+- If all participating experts agree on a point, include it verbatim (deduplicated).
 - If experts provide complementary (non-conflicting) details, merge them.
 - If experts contradict each other, apply conflict resolution and log it.
-- Always preserve open questions from either expert in "Assumptions & Open Questions."
+- Always preserve open questions from all experts in "Assumptions & Open Questions."

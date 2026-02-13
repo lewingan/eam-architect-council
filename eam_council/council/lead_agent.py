@@ -7,9 +7,14 @@ import asyncio
 import anthropic
 from rich.console import Console
 
+from eam_council.council.agentic_subagent import run_agentic_subagent
 from eam_council.council.general_eam_subagent import run_general_subagent
 from eam_council.council.mock_data import get_mock_context
-from eam_council.council.prompts import LEAD_AGENT_SYSTEM, build_lead_prompt
+from eam_council.council.prompts import (
+    LEAD_AGENT_SYSTEM,
+    build_lead_prompt,
+    is_agentic_question,
+)
 from eam_council.council.sap_eam_subagent import run_sap_subagent
 from eam_council.council.skills_loader import load_all_skills
 
@@ -105,24 +110,45 @@ async def run_council(
     skills_context = load_all_skills()
     mock_context = get_mock_context()
 
-    # 2. Run subagents (parallel)
+    # 2. Determine if the agentic expert should participate
+    needs_agentic = is_agentic_question(question)
+
+    # 3. Run subagents (parallel)
     search_label = " (with web search)" if search_enabled else ""
     console.print(f"[dim]Consulting SAP EAM expert{search_label}...[/dim]")
     console.print(f"[dim]Consulting General EAM expert{search_label}...[/dim]")
 
-    sap_draft, general_draft = await asyncio.gather(
+    coros = [
         run_sap_subagent(
             question, skills_context, mock_context, model, dry_run, search_enabled
         ),
         run_general_subagent(
             question, skills_context, mock_context, model, dry_run, search_enabled
         ),
-    )
+    ]
+
+    if needs_agentic:
+        console.print(f"[dim]Consulting Agentic Architecture expert{search_label}...[/dim]")
+        coros.append(
+            run_agentic_subagent(
+                question, skills_context, mock_context, model, dry_run, search_enabled
+            )
+        )
+
+    results = await asyncio.gather(*coros)
+
+    sap_draft = results[0]
+    general_draft = results[1]
+    agentic_draft = results[2] if needs_agentic else None
 
     console.print(f"[green]OK[/green] SAP expert responded ({len(sap_draft.content)} chars)")
     console.print(f"[green]OK[/green] General expert responded ({len(general_draft.content)} chars)")
+    if agentic_draft:
+        console.print(
+            f"[green]OK[/green] Agentic expert responded ({len(agentic_draft.content)} chars)"
+        )
 
-    # 3. Lead agent reconciliation
+    # 4. Lead agent reconciliation
     console.print("[dim]Lead architect reconciling...[/dim]")
 
     if dry_run:
@@ -130,7 +156,11 @@ async def run_council(
     else:
         client = anthropic.Anthropic()
         lead_prompt = build_lead_prompt(
-            question, sap_draft.content, general_draft.content, skills_context
+            question,
+            sap_draft.content,
+            general_draft.content,
+            skills_context,
+            agentic_draft=agentic_draft.content if agentic_draft else None,
         )
         response = client.messages.create(
             model=model,

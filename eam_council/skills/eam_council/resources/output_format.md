@@ -17,6 +17,9 @@ Every council response MUST follow this structure exactly:
 ## General EAM Perspective
 [Key points from the general EAM expert]
 
+## Agentic Architecture Perspective (if applicable)
+[Key points from the agentic architecture expert -- agent pattern, tools, platform, guardrails]
+
 ## Unified Recommendation
 [Merged, reconciled recommendation with clear action items]
 
