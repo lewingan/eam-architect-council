@@ -70,6 +70,40 @@ the question. Limit searches to 2 max -- search only when you need to verify
 a specific standard or discover current best practices.
 """
 
+
+AGENTIC_ARCH_SUBAGENT_SYSTEM = """\
+You are the Agentic Architecture Expert on the EAM Architecture Council.
+
+Your role:
+- Provide best-practice guidance for designing new AI agents and multi-agent systems.
+- Recommend orchestration/runtime patterns (routing, planning, memory, tool contracts).
+- Cover platform choices, performance optimization, observability, safety, and evaluation.
+- Translate agentic guidance into practical steps that can be combined with EAM domain constraints.
+
+You will be given:
+1. An EAM architecture question.
+2. Skills and resource context (glossary, entities, mock data).
+
+Produce a focused draft response covering:
+- Agentic architecture recommendation (single-agent vs multi-agent and why)
+- Platform/runtime options and tool integration patterns
+- Reliability and safety guardrails
+- Evaluation and optimization plan (quality, latency, cost)
+- Key assumptions and delivery risks
+
+Keep your response structured with clear headings.
+"""
+
+_AGENTIC_KEYWORDS = re.compile(
+    r"\b(agentic|agent\s+architecture|multi-agent|orchestrator|planner|tool\s+use|" 
+    r"new\s+agent|build\s+an\s+agent|agent\s+platform)\b",
+    re.IGNORECASE,
+)
+
+def is_agentic_question(question: str) -> bool:
+    """Return True when the question requires agent-building guidance."""
+    return bool(_AGENTIC_KEYWORDS.search(question))
+
 LEAD_AGENT_SYSTEM = """\
 You are the Lead Architect of the EAM Architecture Council.
 
@@ -78,8 +112,9 @@ Your job:
    - SAP EAM Expert: SAP-specific perspective
    - General EAM Expert: Vendor-agnostic industry perspective
 2. You MUST reconcile their outputs into a single unified response.
-3. Follow the reconciliation rules provided in the skills context.
-4. Produce the final output in the EXACT format specified in the output format template.
+3. If an Agentic Architecture Expert draft is present, incorporate it as an additional perspective.
+4. Follow the reconciliation rules provided in the skills context.
+5. Produce the final output in the EXACT format specified in the output format template.
 
 Reconciliation process:
 - Identify agreements -> include directly.
@@ -97,6 +132,57 @@ CRITICAL: Your output MUST include ALL of these sections:
 - Next Agent To Build
 """
 
+
+ALIGNMENT_VALIDATOR_SYSTEM = """\
+You are a strict quality validator for a multi-agent architecture response.
+
+Assess whether the candidate final response is aligned with the expert drafts.
+Look for obvious contradictions, unsupported claims, missing critical caveats,
+or unresolved conflicts between experts.
+
+Return exactly one of these formats:
+- ALIGNED
+- NEEDS_CLARIFICATION | target=<sap|general|agentic> | reason=<short reason>
+"""
+
+
+def build_agentic_with_domain_prompt(
+    question: str,
+    skills_context: str,
+    mock_context: str,
+    sap_draft: str,
+    general_draft: str,
+) -> str:
+    """Build prompt for Agentic expert after EAM drafts are available."""
+    base = build_subagent_prompt(question, skills_context, mock_context)
+    return (
+        f"{base}\n\n"
+        f"## Upstream Domain Drafts\n"
+        f"### SAP EAM Expert\n{sap_draft}\n\n"
+        f"### General EAM Expert\n{general_draft}\n\n"
+        f"Use these domain constraints explicitly when proposing agent architecture."
+    )
+
+
+def build_alignment_check_prompt(
+    question: str,
+    sap_draft: str,
+    general_draft: str,
+    candidate_output: str,
+    agentic_draft: str | None = None,
+) -> str:
+    """Build prompt for validation pass on final candidate output."""
+    agentic_block = ""
+    if agentic_draft:
+        agentic_block = f"## Agentic Draft\n{agentic_draft}\n\n"
+
+    return (
+        f"## Original Question\n{question}\n\n"
+        f"## SAP Draft\n{sap_draft}\n\n"
+        f"## General Draft\n{general_draft}\n\n"
+        f"{agentic_block}"
+        f"## Candidate Final Output\n{candidate_output}\n"
+    )
 
 # ---------------------------------------------------------------------------
 # Question classification for context filtering
@@ -194,13 +280,19 @@ def build_lead_prompt(
     sap_draft: str,
     general_draft: str,
     skills_context: str,
+    agentic_draft: str | None = None,
 ) -> str:
     """Build the user prompt for the lead reconciliation agent."""
+    agentic_block = ""
+    if agentic_draft:
+        agentic_block = f"## Agentic Architecture Expert Draft\n{agentic_draft}\n\n"
+
     return (
         f"## Original Question\n{question}\n\n"
         f"## SAP EAM Expert Draft\n{sap_draft}\n\n"
         f"## General EAM Expert Draft\n{general_draft}\n\n"
+        f"{agentic_block}"
         f"## Skills & Resources Context\n{skills_context}\n\n"
-        f"Reconcile the two expert drafts and produce the final council output "
+        f"Reconcile the expert drafts and produce the final council output "
         f"in the required format. Include ALL required sections."
     )

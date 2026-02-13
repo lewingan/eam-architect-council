@@ -7,9 +7,16 @@ import asyncio
 import anthropic
 from rich.console import Console
 
+from eam_council.council.agentic_architecture_subagent import run_agentic_arch_subagent
 from eam_council.council.general_eam_subagent import run_general_subagent
 from eam_council.council.mock_data import get_mock_context
-from eam_council.council.prompts import LEAD_AGENT_SYSTEM, build_lead_prompt
+from eam_council.council.prompts import (
+    ALIGNMENT_VALIDATOR_SYSTEM,
+    LEAD_AGENT_SYSTEM,
+    build_alignment_check_prompt,
+    build_lead_prompt,
+    is_agentic_question,
+)
 from eam_council.council.sap_eam_subagent import run_sap_subagent
 from eam_council.council.skills_loader import load_all_skills
 
@@ -93,6 +100,132 @@ Purpose: Core optimization logic that the scheduling engine wraps as a service.
 """
 
 
+DRY_RUN_FINAL_AGENTIC = """\
+# EAM Architecture Council -- Response
+
+## Question
+How should we architect an agent to design and optimize SAP EAM work order scheduling workflows?
+
+## Executive Summary
+Yes -- add a dedicated **Agentic Architecture Expert** when questions involve building a new agent or
+multi-agent workflow. SAP and General EAM experts should remain responsible for domain correctness, while
+this new expert guides runtime architecture, orchestration, safety, and optimization.
+
+## SAP EAM Perspective
+Retain SAP PM/S4 API-first patterns and constrain agent outputs to supported integration surfaces.
+
+## General EAM Perspective
+Retain vendor-agnostic reliability and maintenance planning best practices as non-negotiable domain guardrails.
+
+## Unified Recommendation
+
+### Architecture Components
+- **Intent Router** to detect EAM-only vs agentic requests.
+- **SAP EAM Expert** for SAP constraints and integration details.
+- **General EAM Expert** for industry process guidance.
+- **Agentic Architecture Expert** for agent platform, orchestration, and optimization patterns.
+- **Lead Reconciler** to merge into one buildable response.
+
+### Data Model Considerations
+- Keep canonical EAM entities unchanged as shared facts.
+- Add agent-runtime entities: Tool Contract, Plan Step, Trace Event, and Eval Result.
+
+### Integration Points
+- Agent runtime <-> EAM experts: structured prompt contracts.
+- Agent runtime <-> SAP systems: only approved API/OData endpoints.
+- Agent runtime <-> observability: trace and evaluation sinks.
+
+## Assumptions & Open Questions
+- [ ] Preferred agent runtime platform (hosted vs self-managed) is still open.
+- [ ] Cost/latency SLOs need definition before selecting planner depth.
+- [ ] Safety policy for tool use/write actions needs approval.
+
+## Decision Log
+| # | Decision | Rationale | Alternative Considered |
+|---|----------|-----------|----------------------|
+| 1 | Add Agentic Architecture Expert | Existing experts are domain-strong but not runtime-architecture focused | Keep only 2 experts |
+| 2 | Use routing for optional third expert | Avoids extra cost on non-agentic questions | Always invoke third expert |
+
+## Next Agent To Build
+**Agentic Architecture Expert** -- Specialized in multi-agent orchestration, tool contracts,
+observability, and optimization for EAM-related agent development requests.
+"""
+
+
+def _validator_needs_clarification(result_text: str) -> tuple[bool, str | None, str | None]:
+    """Parse validator output for clarification routing."""
+    text = result_text.strip()
+    if text == "ALIGNED":
+        return False, None, None
+    if not text.startswith("NEEDS_CLARIFICATION"):
+        return False, None, None
+
+    target = None
+    reason = None
+    for part in [p.strip() for p in text.split("|")]:
+        if part.startswith("target="):
+            target = part.split("=", 1)[1].strip().lower()
+        if part.startswith("reason="):
+            reason = part.split("=", 1)[1].strip()
+
+    return True, target, reason
+
+
+async def _request_clarification(
+    *,
+    target: str,
+    reason: str | None,
+    question: str,
+    skills_context: str,
+    mock_context: str,
+    model: str,
+    dry_run: bool,
+    search_enabled: bool,
+    sap_draft: str,
+    general_draft: str,
+    agentic_draft: str | None,
+):
+    """Request a targeted clarification from one expert."""
+    clarification_question = (
+        f"{question}\n\n"
+        f"Clarification request from Lead Architect: {reason or 'Resolve any contradictions and align with other experts.'}\n"
+        f"Please return only updated guidance for your domain and explicitly resolve the issue."
+    )
+
+    if target == "sap":
+        return await run_sap_subagent(
+            clarification_question,
+            skills_context,
+            mock_context,
+            model,
+            dry_run,
+            search_enabled,
+        )
+
+    if target == "general":
+        return await run_general_subagent(
+            clarification_question,
+            skills_context,
+            mock_context,
+            model,
+            dry_run,
+            search_enabled,
+        )
+
+    if target == "agentic":
+        return await run_agentic_arch_subagent(
+            clarification_question,
+            skills_context,
+            mock_context,
+            model,
+            dry_run,
+            sap_draft=sap_draft,
+            general_draft=general_draft,
+        )
+
+    return None
+
+
 async def run_council(
     question: str,
     model: str,
@@ -110,27 +243,62 @@ async def run_council(
     console.print(f"[dim]Consulting SAP EAM expert{search_label}...[/dim]")
     console.print(f"[dim]Consulting General EAM expert{search_label}...[/dim]")
 
-    sap_draft, general_draft = await asyncio.gather(
-        run_sap_subagent(
-            question, skills_context, mock_context, model, dry_run, search_enabled
-        ),
-        run_general_subagent(
-            question, skills_context, mock_context, model, dry_run, search_enabled
-        ),
-    )
+    agentic_mode = is_agentic_question(question)
+
+    if agentic_mode:
+        # Stage 1: gather domain constraints first
+        sap_draft, general_draft = await asyncio.gather(
+            run_sap_subagent(
+                question, skills_context, mock_context, model, dry_run, search_enabled
+            ),
+            run_general_subagent(
+                question, skills_context, mock_context, model, dry_run, search_enabled
+            ),
+        )
+
+        # Stage 2: run agentic expert using EAM drafts as upstream constraints
+        console.print("[dim]Consulting Agentic Architecture expert (after EAM drafts)...[/dim]")
+        agentic_draft = await run_agentic_arch_subagent(
+            question,
+            skills_context,
+            mock_context,
+            model,
+            dry_run,
+            sap_draft=sap_draft.content,
+            general_draft=general_draft.content,
+        )
+    else:
+        sap_draft, general_draft = await asyncio.gather(
+            run_sap_subagent(
+                question, skills_context, mock_context, model, dry_run, search_enabled
+            ),
+            run_general_subagent(
+                question, skills_context, mock_context, model, dry_run, search_enabled
+            ),
+        )
+        agentic_draft = None
 
     console.print(f"[green]OK[/green] SAP expert responded ({len(sap_draft.content)} chars)")
     console.print(f"[green]OK[/green] General expert responded ({len(general_draft.content)} chars)")
+    if agentic_draft:
+        console.print(
+            f"[green]OK[/green] Agentic expert responded ({len(agentic_draft.content)} chars)"
+        )
 
     # 3. Lead agent reconciliation
     console.print("[dim]Lead architect reconciling...[/dim]")
 
     if dry_run:
-        final_output = DRY_RUN_FINAL
+        final_output = DRY_RUN_FINAL_AGENTIC if agentic_mode else DRY_RUN_FINAL
     else:
         client = anthropic.Anthropic()
+
         lead_prompt = build_lead_prompt(
-            question, sap_draft.content, general_draft.content, skills_context
+            question,
+            sap_draft.content,
+            general_draft.content,
+            skills_context,
+            agentic_draft.content if agentic_draft else None,
         )
         response = client.messages.create(
             model=model,
@@ -139,6 +307,68 @@ async def run_council(
             messages=[{"role": "user", "content": lead_prompt}],
         )
         final_output = response.content[0].text
+
+        # 4. Validation + targeted clarification loop (live mode)
+        for _ in range(2):
+            check_prompt = build_alignment_check_prompt(
+                question,
+                sap_draft.content,
+                general_draft.content,
+                final_output,
+                agentic_draft.content if agentic_draft else None,
+            )
+            check = client.messages.create(
+                model=model,
+                max_tokens=400,
+                system=ALIGNMENT_VALIDATOR_SYSTEM,
+                messages=[{"role": "user", "content": check_prompt}],
+            )
+            verdict = check.content[0].text
+            needs_fix, target, reason = _validator_needs_clarification(verdict)
+            if not needs_fix or not target:
+                break
+
+            console.print(
+                f"[yellow]Validation flagged misalignment[/yellow] -> requesting clarification from {target} expert"
+            )
+            updated = await _request_clarification(
+                target=target,
+                reason=reason,
+                question=question,
+                skills_context=skills_context,
+                mock_context=mock_context,
+                model=model,
+                dry_run=dry_run,
+                search_enabled=search_enabled,
+                sap_draft=sap_draft.content,
+                general_draft=general_draft.content,
+                agentic_draft=agentic_draft.content if agentic_draft else None,
+            )
+
+            if updated is None:
+                break
+
+            if target == "sap":
+                sap_draft = updated
+            elif target == "general":
+                general_draft = updated
+            elif target == "agentic":
+                agentic_draft = updated
+
+            lead_prompt = build_lead_prompt(
+                question,
+                sap_draft.content,
+                general_draft.content,
+                skills_context,
+                agentic_draft.content if agentic_draft else None,
+            )
+            response = client.messages.create(
+                model=model,
+                max_tokens=8192,
+                system=LEAD_AGENT_SYSTEM,
+                messages=[{"role": "user", "content": lead_prompt}],
+            )
+            final_output = response.content[0].text
 
     console.print("[green]OK[/green] Reconciliation complete")
     return final_output
