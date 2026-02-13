@@ -53,3 +53,18 @@ def test_skills_loader():
     assert "eam_spec_writer" in context
     assert "eam_glossary_entities" in context
     assert "glossary" in context.lower()
+
+
+def test_agentic_question_triggers_agentic_recommendation():
+    """Agent-building questions should include agentic expert recommendation in dry-run."""
+    result = _run_cli("Design a new agentic workflow for SAP EAM planning", "--dry-run")
+    assert result.returncode == 0, f"CLI failed: {result.stderr}"
+    assert "Agentic Architecture Expert" in result.stdout
+
+
+def test_agentic_question_classifier():
+    """Agentic classifier should detect explicit agent-building intent."""
+    from eam_council.council.prompts import is_agentic_question
+
+    assert is_agentic_question("Plan a multi-agent architecture for EAM triage")
+    assert not is_agentic_question("How do I configure maintenance plans in SAP PM?")

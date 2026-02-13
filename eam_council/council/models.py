@@ -19,4 +19,5 @@ class CouncilResult(BaseModel):
     question: str
     sap_draft: SubagentDraft
     general_draft: SubagentDraft
+    agentic_draft: SubagentDraft | None = None
     final_output: str

@@ -1,6 +1,6 @@
 # EAM Architecture Council
 
-A multi-agent CLI tool that orchestrates two expert subagents (SAP EAM + General EAM) to answer Enterprise Asset Management architecture questions and produce structured buildable specs.
+A multi-agent CLI tool that orchestrates core expert subagents (SAP EAM + General EAM), with an optional Agentic Architecture Expert for agent-building requests, to answer Enterprise Asset Management architecture questions and produce structured buildable specs.
 
 Built with the Anthropic Claude API (Python SDK).
 
@@ -31,6 +31,12 @@ User Question
   Structured Output
   (Buildable Spec)
 ```
+
+
+> For agent-development questions (e.g., "design a new EAM agent"), orchestration is now **sequential**:
+> 1) SAP + General EAM drafts are generated,
+> 2) Agentic Architecture Expert runs using those drafts as upstream constraints,
+> 3) Lead reconciliation runs with a validation/clarification pass to resolve obvious misalignments.
 
 ## Setup
 
