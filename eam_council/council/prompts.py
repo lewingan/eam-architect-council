@@ -23,6 +23,7 @@ Produce a focused draft response covering:
 - Integration approach (OData v4 preferred; RFC/BAPI only as fallback with justification)
 - SAP-specific risks or constraints
 - Key assumptions
+- For agent-design questions: an explicit `Agent Suitability (SAP View)` verdict (Suitable/Not Suitable), impact level (High/Medium/Low), and rationale grounded in SAP platform fit, integration complexity, governance, and expected value
 
 IMPORTANT: Do NOT list SAP database tables (e.g., AUFK, EQUI, IFLO) unless the question
 specifically involves data migration, ABAP custom code, or database-level debugging.
@@ -58,6 +59,7 @@ Produce a focused draft response covering:
 - Data model considerations (vendor-neutral)
 - Integration and interoperability patterns
 - Key assumptions and risks
+- For agent-design questions: an explicit `Agent Suitability (General EAM View)` verdict (Suitable/Not Suitable), impact level (High/Medium/Low), and rationale grounded in process stability, change-management cost, KPI uplift, and maintainability
 
 Keep your response structured with clear headings. Stay within general EAM expertise.
 """
@@ -90,6 +92,7 @@ Produce a focused draft response covering:
 - Reliability and safety guardrails
 - Evaluation and optimization plan (quality, latency, cost)
 - Key assumptions and delivery risks
+- Explicit `Agent Suitability (Agentic View)` verdict (Suitable/Not Suitable), impact level (High/Medium/Low), and whether the use case is worthwhile now vs later
 
 Keep your response structured with clear headings.
 """
@@ -115,23 +118,29 @@ Your job:
    - General EAM Expert: Vendor-agnostic industry perspective
 2. You MUST reconcile their outputs into a single unified response.
 3. If an Agentic Architecture Expert draft is present, incorporate it as an additional perspective.
-4. Follow the reconciliation rules provided in the skills context.
-5. Produce the final output in the EXACT format specified in the output format template.
+4. For agent-design questions, explicitly decide whether the use case is suitable for an agent and justify yes/no.
+5. Include explicit impact/worthwhile assessments from SAP, General EAM, and Agentic perspectives.
+6. Follow the reconciliation rules provided in the skills context.
+7. Produce the final output in the EXACT format specified in the output format template.
 
 Reconciliation process:
 - Identify agreements -> include directly.
 - Identify complementary points -> merge them.
 - Identify conflicts -> resolve using the priority rules and log in Decision Log.
+- If experts disagree on suitability/impact, resolve explicitly and justify in Decision Log.
 - Preserve all open questions from both experts.
 
 CRITICAL: Your output MUST include ALL of these sections:
 - Executive Summary
 - SAP EAM Perspective (summary of SAP expert's input)
 - General EAM Perspective (summary of general expert's input)
+- Agentic Architecture Perspective (summary of agentic expert input; mark not applicable when absent)
+- Agent Suitability Decision (Suitable/Not Suitable + why)
+- Impact & Worthwhile Assessment (SAP + General + Agentic + overall verdict)
 - Unified Recommendation (with Architecture Components, Data Model, Integration Points)
 - Assumptions & Open Questions
 - Decision Log (table format)
-- Next Agent To Build
+- Next Agent To Build (with inputs, outputs, tool/API contracts, memory/state strategy, MVP scope, acceptance criteria)
 """
 
 

@@ -35,23 +35,27 @@ DRY_RUN_FINAL = """\
 How should we architect a work order scheduling module for SAP EAM?
 
 ## Executive Summary
-The council recommends a hybrid architecture that leverages SAP PM's native scheduling \
-capabilities via published OData APIs (API_MAINTORDER_SRV, API_MAINTENANCEPLAN_SRV) \
-while introducing an external constraint-based scheduling engine for advanced \
-optimization. This approach combines SAP's data authority with industry-standard \
-scheduling best practices.
+The council recommends a hybrid architecture that leverages SAP PM's native scheduling capabilities via published OData APIs (API_MAINTORDER_SRV, API_MAINTENANCEPLAN_SRV) while introducing an external constraint-based scheduling engine for advanced optimization. This approach combines SAP's data authority with industry-standard scheduling best practices.
 
 ## SAP EAM Perspective
-The SAP expert recommends building on SAP PM's scheduling framework using the \
-published OData v4 APIs on the SAP Business Accelerator Hub. Key services include \
-API_MAINTORDER_SRV (work orders and operations), API_EQUIPMENT_SRV (asset master), \
-and API_WORKCENTER_SRV (resource/capacity data). Integration via SAP BTP Integration \
-Suite for event-driven patterns.
+The SAP expert recommends building on SAP PM's scheduling framework using the published OData v4 APIs on the SAP Business Accelerator Hub. Key services include API_MAINTORDER_SRV (work orders and operations), API_EQUIPMENT_SRV (asset master), and API_WORKCENTER_SRV (resource/capacity data). Integration via SAP BTP Integration Suite for event-driven patterns.
 
 ## General EAM Perspective
-The general EAM expert recommends a priority-driven, constraint-based scheduling engine \
-decoupled from the CMMS via an integration layer. Follows ISO 55000 principles with a \
-rolling 2-week firm / 6-week planning horizon.
+The general EAM expert recommends a priority-driven, constraint-based scheduling engine decoupled from the CMMS via an integration layer. Follows ISO 55000 principles with a rolling 2-week firm / 6-week planning horizon.
+
+## Agentic Architecture Perspective
+Not applicable for this question.
+
+## Agent Suitability Decision
+- **Decision:** Not Suitable
+- **Why (technical + business):** This request is not asking for a new AI agent, so an agent implementation would add unnecessary complexity.
+- **If Not Suitable, Better Alternative:** Deliver as a deterministic service/module with standard integration patterns.
+
+## Impact & Worthwhile Assessment
+- **SAP EAM Expert View:** Low impact for an agent approach in this specific request.
+- **General EAM Expert View:** Low impact for an agent approach in this specific request.
+- **Agentic Architecture Expert View:** Not applicable for this question.
+- **Overall Council Verdict:** Not worthwhile to build an agent for this request.
 
 ## Unified Recommendation
 
@@ -98,11 +102,15 @@ rolling 2-week firm / 6-week planning horizon.
 | 4 | Rolling horizon (2wk firm / 6wk plan) | Industry best practice balances commitment with flexibility | Fixed monthly schedule (too rigid) |
 
 ## Next Agent To Build
-**Scheduling Constraint Solver Agent** -- An agent that takes a set of work orders, \
-resource calendars, and constraints (safety windows, production schedules, parts \
-availability) and produces an optimized schedule. Inputs: work order list, resource \
-availability, constraint rules. Outputs: scheduled timeline with conflict report. \
-Purpose: Core optimization logic that the scheduling engine wraps as a service.
+**Scheduling Constraint Solver Module** -- A deterministic optimization module that takes a set of work orders,
+resource calendars, and constraints (safety windows, production schedules, parts availability) and produces an
+optimized schedule.
+- **Inputs:** work order list, resource availability, constraint rules.
+- **Outputs:** scheduled timeline, conflict report, optimization score.
+- **Tool/API contracts:** SAP OData read/write endpoints for orders/operations and calendar ingestion interface.
+- **Memory/state strategy:** Persist schedule snapshots and decision traces per planning run.
+- **MVP scope:** Single plant, preventive maintenance orders only, daily batch optimization.
+- **Acceptance criteria:** >=90% schedule feasibility, <10 min run time per batch, auditable decision log.
 """
 
 
@@ -122,6 +130,21 @@ Retain SAP PM/S4 API-first patterns and constrain agent outputs to supported int
 
 ## General EAM Perspective
 Retain vendor-agnostic reliability and maintenance planning best practices as non-negotiable domain guardrails.
+
+## Agentic Architecture Perspective
+The agentic expert recommends a dedicated agentic design layer for agent-building requests,
+with explicit orchestration, tool contracts, observability, and evaluation loops.
+
+## Agent Suitability Decision
+- **Decision:** Suitable
+- **Why (technical + business):** The use case explicitly asks to design an EAM-related agent; agentic capabilities provide measurable value via orchestration, tool use, and adaptive planning while retaining domain guardrails.
+- **If Not Suitable, Better Alternative:** Not applicable.
+
+## Impact & Worthwhile Assessment
+- **SAP EAM Expert View:** High impact when constrained to approved SAP APIs and governance boundaries.
+- **General EAM Expert View:** High impact when paired with stable maintenance processes and clear KPI ownership.
+- **Agentic Architecture Expert View:** High impact due to improved adaptability, observability, and optimization loops.
+- **Overall Council Verdict:** Worth building now as a scoped MVP with clear guardrails and measurable outcomes.
 
 ## Unified Recommendation
 
@@ -153,8 +176,13 @@ Retain vendor-agnostic reliability and maintenance planning best practices as no
 | 2 | Use routing for optional third expert | Avoids extra cost on non-agentic questions | Always invoke third expert |
 
 ## Next Agent To Build
-**Agentic Architecture Expert** -- Specialized in multi-agent orchestration, tool contracts,
-observability, and optimization for EAM-related agent development requests.
+**EAM Work Order Orchestrator Agent** -- Coordinates planning, SAP data retrieval, and schedule recommendation generation.
+- **Inputs:** user intent, maintenance backlog, equipment criticality, work-center capacity, policy constraints.
+- **Outputs:** ranked execution plan, rationale trace, exception list, and write-back payload candidates.
+- **Tool/API contracts:** SAP OData APIs (orders/equipment/work centers), policy-check tool, and notification tool.
+- **Memory/state strategy:** Short-term task memory for current planning cycle + persistent audit trace store.
+- **MVP scope:** Read-only recommendations for one plant and one order type.
+- **Acceptance criteria:** recommendation precision target met, policy violations blocked, and full traceability for each recommendation.
 """
 
 
@@ -335,6 +363,9 @@ async def run_council(
             "Executive Summary",
             "SAP EAM Perspective",
             "General EAM Perspective",
+            "Agentic Architecture Perspective",
+            "Agent Suitability Decision",
+            "Impact & Worthwhile Assessment",
             "Unified Recommendation",
             "Assumptions & Open Questions",
             "Decision Log",

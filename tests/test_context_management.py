@@ -24,4 +24,18 @@ def test_build_lead_prompt_compacts_long_drafts():
 def test_load_selected_skills_subset():
     ctx = load_selected_skills(include_skills={"eam_council"})
     assert "=== SKILL: eam_council ===" in ctx
+    assert "Agent Suitability Decision" in ctx
+    assert "Impact & Worthwhile Assessment" in ctx
     assert "=== SKILL: eam_spec_writer ===" not in ctx
+
+
+def test_build_lead_prompt_includes_agentic_draft_section_when_present():
+    prompt = build_lead_prompt(
+        "Design an EAM agent",
+        "sap draft",
+        "general draft",
+        "skills",
+        agentic_draft="agentic draft",
+    )
+    assert "## Agentic Architecture Expert Draft" in prompt
+    assert "agentic draft" in prompt
