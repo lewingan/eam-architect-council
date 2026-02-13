@@ -67,4 +67,15 @@ def test_agentic_question_classifier():
     from eam_council.council.prompts import is_agentic_question
 
     assert is_agentic_question("Plan a multi-agent architecture for EAM triage")
+    assert is_agentic_question("creating an AI agent to optimize work orders")
+    assert is_agentic_question("architect an agent for scheduling")
+    assert not is_agentic_question("Need a service agent for front desk requests")
     assert not is_agentic_question("How do I configure maintenance plans in SAP PM?")
+
+
+def test_agentic_question_triggers_agentic_dry_run_template():
+    """Agentic classifier true path should include agentic draft sections in orchestration output."""
+    result = _run_cli("creating an AI agent to optimize work orders", "--dry-run")
+    assert result.returncode == 0, f"CLI failed: {result.stderr}"
+    assert "Agentic Architecture Expert" in result.stdout
+    assert "Agentic Architecture Perspective" in result.stdout

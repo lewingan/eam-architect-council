@@ -98,8 +98,15 @@ Keep your response structured with clear headings.
 """
 
 _AGENTIC_KEYWORDS = re.compile(
-    r"\b(agentic|agent\s+architecture|multi-agent|orchestrator|planner|tool\s+use|"
-    r"new\s+agent|build\s+an\s+agent|agent\s+platform)\b",
+    r"\b("
+    r"agentic|agent\s+architecture|multi-agent|orchestrator|planner|tool\s+use|"
+    r"new\s+agent|build\s+an\s+agent|agent\s+platform|"
+    r"ai[\s-]?agent|autonomous\s+agent|"
+    r"(?:create|creating|design|designing|architect|architecting|build|building|optimi[sz]e|optimi[sz]ing)"
+    r"(?:\W+\w+){0,3}\W+(?:ai[\s-]?agent|agent)|"
+    r"(?:ai[\s-]?agent|agent)(?:\W+\w+){0,3}\W+"
+    r"(?:create|creating|design|designing|architect|architecting|build|building|optimi[sz]e|optimi[sz]ing|autonomous)"
+    r")\b",
     re.IGNORECASE,
 )
 
