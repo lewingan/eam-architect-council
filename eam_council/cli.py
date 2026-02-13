@@ -44,6 +44,28 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable web search for subagents (offline/cost-sensitive mode)",
     )
+    parser.add_argument(
+        "--minimal-context",
+        action="store_true",
+        help="Enable minimal context mode to reduce token usage",
+    )
+    parser.add_argument(
+        "--search-budget",
+        type=int,
+        default=None,
+        help="Override search tool budget for this run",
+    )
+    parser.add_argument(
+        "--tokens-per-minute",
+        type=int,
+        default=None,
+        help="Override EAM_TOKENS_PER_MINUTE throttling budget",
+    )
+    parser.add_argument(
+        "--disable-tpm-throttle",
+        action="store_true",
+        help="Disable tokens-per-minute throttling for this run",
+    )
     return parser.parse_args()
 
 
@@ -61,6 +83,14 @@ def main() -> None:
 
     model = args.model or os.environ.get("EAM_MODEL", "claude-sonnet-4-20250514")
     search_enabled = not args.no_search
+    if args.minimal_context:
+        os.environ["EAM_MINIMAL_MODE"] = "1"
+    if args.search_budget is not None:
+        os.environ["EAM_SEARCH_BUDGET"] = str(args.search_budget)
+    if args.tokens_per_minute is not None:
+        os.environ["EAM_TOKENS_PER_MINUTE"] = str(args.tokens_per_minute)
+    if args.disable_tpm_throttle:
+        os.environ["EAM_ENABLE_TPM_THROTTLE"] = "0"
 
     console.print(
         Panel(

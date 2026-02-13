@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import anthropic
 
+from eam_council.council.llm import create_with_retry
 from eam_council.council.models import SubagentDraft
 from eam_council.council.prompts import (
     SAP_EAM_SUBAGENT_SEARCH_ADDENDUM,
@@ -79,7 +80,7 @@ async def run_sap_subagent(
     if search_enabled:
         kwargs["tools"] = [SAP_WEB_SEARCH_TOOL]
 
-    response = client.messages.create(**kwargs)
+    response = create_with_retry(client, **kwargs)
 
     content = extract_text_from_response(response)
     return SubagentDraft(

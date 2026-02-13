@@ -85,6 +85,21 @@ python -m eam_council "Any question here" --dry-run
 python -m eam_council "Your question" --model claude-sonnet-4-20250514
 ```
 
+### Throttle API usage (TPM)
+
+Use `.env` (or env vars) to enforce request throttling:
+
+```bash
+EAM_TOKENS_PER_MINUTE=30000
+EAM_ENABLE_TPM_THROTTLE=true
+```
+
+You can also override per run:
+
+```bash
+python -m eam_council "Your question" --tokens-per-minute 25000
+```
+
 ### Output
 - Printed to stdout with rich formatting
 - Written to `out/latest.md`

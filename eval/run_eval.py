@@ -50,6 +50,16 @@ def check_format_compliance(output: str) -> tuple[int, list[str]]:
     return 1, missing
 
 
+
+
+def estimate_cost_signals(output: str) -> dict[str, int]:
+    """Heuristic cost/quality signals from output text."""
+    lower = output.lower()
+    return {
+        "has_decision_log_rows": lower.count("| 1 |"),
+        "has_api_refs": int("sap api references" in lower),
+        "assumption_checkboxes": output.count("- [ ]"),
+    }
 def run_question(label: str, question: str, dry_run: bool) -> Path:
     """Run the CLI for a single question and save output."""
     OUTPUTS_DIR.mkdir(exist_ok=True)
@@ -84,6 +94,7 @@ def main() -> None:
         out_file = run_question(label, question, dry_run)
         output = out_file.read_text(encoding="utf-8")
         fmt_score, missing = check_format_compliance(output)
+        signals = estimate_cost_signals(output)
 
         missing_str = ", ".join(missing) if missing else "-"
         print(f"{label:<40} {fmt_score:>5}/5   {missing_str}")
@@ -92,12 +103,15 @@ def main() -> None:
             "label": label,
             "format_score": fmt_score,
             "missing": missing,
+            "signals": signals,
             "output_file": str(out_file),
         })
 
     print("\n" + "=" * 80)
     avg = sum(r["format_score"] for r in results) / len(results) if results else 0
+    avg_assumptions = (sum(r["signals"]["assumption_checkboxes"] for r in results) / len(results)) if results else 0
     print(f"Average format compliance: {avg:.1f}/5")
+    print(f"Average assumptions checklist items: {avg_assumptions:.1f}")
     print(f"\nOutputs saved to: {OUTPUTS_DIR.resolve()}")
     print(
         "\nNote: Completeness, Correctness, Assumptions Quality, and Actionability "
