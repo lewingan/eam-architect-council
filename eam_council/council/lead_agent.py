@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import anthropic
 from rich.console import Console
@@ -15,10 +16,15 @@ from eam_council.council.prompts import (
     LEAD_AGENT_SYSTEM,
     build_alignment_check_prompt,
     build_lead_prompt,
+    classify_question,
+    filter_context_for_question,
     is_agentic_question,
 )
 from eam_council.council.sap_eam_subagent import run_sap_subagent
-from eam_council.council.skills_loader import load_all_skills
+from eam_council.council.llm import create_with_retry
+from eam_council.council.runtime_config import load_runtime_config
+from eam_council.council.skills_loader import load_all_skills, load_selected_skills
+from eam_council.council.telemetry import RunTelemetry
 
 console = Console()
 
@@ -233,30 +239,51 @@ async def run_council(
     search_enabled: bool = True,
 ) -> str:
     """Run the full council workflow and return the final output."""
-    # 1. Load skills and mock data
-    console.print("[dim]Loading skills and resources...[/dim]")
-    skills_context = load_all_skills()
-    mock_context = get_mock_context()
+    cfg = load_runtime_config()
+    telemetry = RunTelemetry()
 
-    # 2. Run subagents (parallel)
-    search_label = " (with web search)" if search_enabled else ""
+    console.print("[dim]Loading skills and resources...[/dim]")
+    if cfg.context_routing_v2:
+        classification = classify_question(question)
+        selected_skills = {"eam_council", "eam_glossary_entities"}
+        if classification != "general":
+            selected_skills.add("eam_spec_writer")
+        include_resources = {
+            "eam_glossary_entities": {"glossary.md"} if cfg.minimal_mode else {"glossary.md", "canonical_entities.yaml"},
+            "eam_council": {"output_format.md", "reconciliation_rules.md"},
+            "eam_spec_writer": {"spec_template.md"} if cfg.minimal_mode else {"spec_template.md", "example_spec_work_order_scheduling.md"},
+        }
+        skills_context = load_selected_skills(include_skills=selected_skills, include_resources=include_resources)
+    else:
+        skills_context = load_all_skills()
+
+    mock_context = "" if cfg.minimal_mode else get_mock_context()
+
+    effective_search = search_enabled
+    if cfg.conditional_search:
+        effective_search = search_enabled and classify_question(question) == "api"
+
+    search_label = " (with web search)" if effective_search else ""
     console.print(f"[dim]Consulting SAP EAM expert{search_label}...[/dim]")
     console.print(f"[dim]Consulting General EAM expert{search_label}...[/dim]")
 
     agentic_mode = is_agentic_question(question)
+    search_budget = cfg.search_budget
+    sap_search = effective_search and search_budget > 0
+    if sap_search:
+        search_budget -= 1
+    general_search = effective_search and search_budget > 0
+    if general_search:
+        search_budget -= 1
+
+    sap_draft, general_draft = await asyncio.gather(
+        run_sap_subagent(question, skills_context, mock_context, model, dry_run, sap_search),
+        run_general_subagent(question, skills_context, mock_context, model, dry_run, general_search),
+    )
+    telemetry.record(stage="sap", prompt_chars=len(question) + len(skills_context) + len(mock_context), completion_chars=len(sap_draft.content), elapsed_ms=0, tool_uses=1 if sap_search else 0)
+    telemetry.record(stage="general", prompt_chars=len(question) + len(skills_context) + len(mock_context), completion_chars=len(general_draft.content), elapsed_ms=0, tool_uses=1 if general_search else 0)
 
     if agentic_mode:
-        # Stage 1: gather domain constraints first
-        sap_draft, general_draft = await asyncio.gather(
-            run_sap_subagent(
-                question, skills_context, mock_context, model, dry_run, search_enabled
-            ),
-            run_general_subagent(
-                question, skills_context, mock_context, model, dry_run, search_enabled
-            ),
-        )
-
-        # Stage 2: run agentic expert using EAM drafts as upstream constraints
         console.print("[dim]Consulting Agentic Architecture expert (after EAM drafts)...[/dim]")
         agentic_draft = await run_agentic_arch_subagent(
             question,
@@ -267,26 +294,18 @@ async def run_council(
             sap_draft=sap_draft.content,
             general_draft=general_draft.content,
         )
+        telemetry.record(stage="agentic", prompt_chars=len(question) + len(skills_context) + len(mock_context) + len(sap_draft.content) + len(general_draft.content), completion_chars=len(agentic_draft.content), elapsed_ms=0)
     else:
-        sap_draft, general_draft = await asyncio.gather(
-            run_sap_subagent(
-                question, skills_context, mock_context, model, dry_run, search_enabled
-            ),
-            run_general_subagent(
-                question, skills_context, mock_context, model, dry_run, search_enabled
-            ),
-        )
         agentic_draft = None
 
     console.print(f"[green]OK[/green] SAP expert responded ({len(sap_draft.content)} chars)")
     console.print(f"[green]OK[/green] General expert responded ({len(general_draft.content)} chars)")
     if agentic_draft:
-        console.print(
-            f"[green]OK[/green] Agentic expert responded ({len(agentic_draft.content)} chars)"
-        )
+        console.print(f"[green]OK[/green] Agentic expert responded ({len(agentic_draft.content)} chars)")
 
-    # 3. Lead agent reconciliation
     console.print("[dim]Lead architect reconciling...[/dim]")
+
+    lead_skills_context = filter_context_for_question(skills_context, question) if cfg.context_routing_v2 else skills_context
 
     if dry_run:
         final_output = DRY_RUN_FINAL_AGENTIC if agentic_mode else DRY_RUN_FINAL
@@ -297,18 +316,46 @@ async def run_council(
             question,
             sap_draft.content,
             general_draft.content,
-            skills_context,
+            lead_skills_context,
             agentic_draft.content if agentic_draft else None,
+            compact=cfg.lead_compaction,
         )
-        response = client.messages.create(
+        response = create_with_retry(
+            client,
+            retries=cfg.retries if cfg.enable_retry else 0,
             model=model,
-            max_tokens=8192,
+            max_tokens=cfg.lead_max_tokens,
             system=LEAD_AGENT_SYSTEM,
             messages=[{"role": "user", "content": lead_prompt}],
         )
         final_output = response.content[0].text
+        telemetry.record(stage="lead", prompt_chars=len(lead_prompt), completion_chars=len(final_output), elapsed_ms=0)
 
-        # 4. Validation + targeted clarification loop (live mode)
+        required_sections = [
+            "Executive Summary",
+            "SAP EAM Perspective",
+            "General EAM Perspective",
+            "Unified Recommendation",
+            "Assumptions & Open Questions",
+            "Decision Log",
+            "Next Agent To Build",
+        ]
+
+        def _has_all_sections(text: str) -> bool:
+            low = text.lower()
+            return all(s.lower() in low for s in required_sections)
+
+        if not _has_all_sections(final_output):
+            response = create_with_retry(
+                client,
+                retries=cfg.retries if cfg.enable_retry else 0,
+                model=model,
+                max_tokens=cfg.lead_max_tokens_escalated,
+                system=LEAD_AGENT_SYSTEM,
+                messages=[{"role": "user", "content": lead_prompt}],
+            )
+            final_output = response.content[0].text
+
         for _ in range(2):
             check_prompt = build_alignment_check_prompt(
                 question,
@@ -317,7 +364,9 @@ async def run_council(
                 final_output,
                 agentic_draft.content if agentic_draft else None,
             )
-            check = client.messages.create(
+            check = create_with_retry(
+                client,
+                retries=cfg.retries if cfg.enable_retry else 0,
                 model=model,
                 max_tokens=400,
                 system=ALIGNMENT_VALIDATOR_SYSTEM,
@@ -339,7 +388,7 @@ async def run_council(
                 mock_context=mock_context,
                 model=model,
                 dry_run=dry_run,
-                search_enabled=search_enabled,
+                search_enabled=False,
                 sap_draft=sap_draft.content,
                 general_draft=general_draft.content,
                 agentic_draft=agentic_draft.content if agentic_draft else None,
@@ -359,16 +408,21 @@ async def run_council(
                 question,
                 sap_draft.content,
                 general_draft.content,
-                skills_context,
+                lead_skills_context,
                 agentic_draft.content if agentic_draft else None,
+                compact=True,
             )
-            response = client.messages.create(
+            response = create_with_retry(
+                client,
+                retries=cfg.retries if cfg.enable_retry else 0,
                 model=model,
-                max_tokens=8192,
+                max_tokens=cfg.lead_max_tokens,
                 system=LEAD_AGENT_SYSTEM,
                 messages=[{"role": "user", "content": lead_prompt}],
             )
             final_output = response.content[0].text
+
+    telemetry.write_json(Path("out") / "telemetry_latest.json")
 
     console.print("[green]OK[/green] Reconciliation complete")
     return final_output

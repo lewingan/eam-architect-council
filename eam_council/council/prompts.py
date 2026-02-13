@@ -95,14 +95,16 @@ Keep your response structured with clear headings.
 """
 
 _AGENTIC_KEYWORDS = re.compile(
-    r"\b(agentic|agent\s+architecture|multi-agent|orchestrator|planner|tool\s+use|" 
+    r"\b(agentic|agent\s+architecture|multi-agent|orchestrator|planner|tool\s+use|"
     r"new\s+agent|build\s+an\s+agent|agent\s+platform)\b",
     re.IGNORECASE,
 )
 
+
 def is_agentic_question(question: str) -> bool:
     """Return True when the question requires agent-building guidance."""
     return bool(_AGENTIC_KEYWORDS.search(question))
+
 
 LEAD_AGENT_SYSTEM = """\
 You are the Lead Architect of the EAM Architecture Council.
@@ -184,9 +186,6 @@ def build_alignment_check_prompt(
         f"## Candidate Final Output\n{candidate_output}\n"
     )
 
-# ---------------------------------------------------------------------------
-# Question classification for context filtering
-# ---------------------------------------------------------------------------
 
 _DATA_KEYWORDS = re.compile(
     r"\b(migrat|abap|table[s]?\b|custom code|debug|data dictionary|"
@@ -213,17 +212,11 @@ def classify_question(question: str) -> str:
 
 
 def _filter_skills_context(skills_context: str, classification: str) -> str:
-    """Filter the skills context based on question classification.
-
-    - ``"api"``     -> strip ``sap_internals`` blocks from canonical entities.
-    - ``"data"``    -> include everything (tables are relevant).
-    - ``"general"`` -> strip full canonical entities YAML, keep glossary.
-    """
+    """Filter the skills context based on question classification."""
     if classification == "data":
         return skills_context
 
     if classification == "general":
-        # Remove the canonical_entities.yaml resource section entirely
         lines = skills_context.split("\n")
         filtered: list[str] = []
         skip = False
@@ -239,7 +232,6 @@ def _filter_skills_context(skills_context: str, classification: str) -> str:
                 filtered.append(line)
         return "\n".join(filtered)
 
-    # classification == "api": strip sap_internals blocks
     lines = skills_context.split("\n")
     filtered = []
     skip_internals = False
@@ -248,11 +240,8 @@ def _filter_skills_context(skills_context: str, classification: str) -> str:
             skip_internals = True
             continue
         if skip_internals:
-            # sap_internals sub-keys are indented further; stop skipping at
-            # a line that is at the same or lesser indentation level.
             stripped = line.lstrip()
             indent = len(line) - len(stripped)
-            # sap_internals is typically at 4-space indent; its children at 6+
             if stripped and indent <= 4 and not stripped.startswith("-"):
                 skip_internals = False
             else:
@@ -261,12 +250,14 @@ def _filter_skills_context(skills_context: str, classification: str) -> str:
     return "\n".join(filtered)
 
 
-def build_subagent_prompt(
-    question: str, skills_context: str, mock_context: str
-) -> str:
+def filter_context_for_question(skills_context: str, question: str) -> str:
+    """Convenience wrapper to filter context for a question."""
+    return _filter_skills_context(skills_context, classify_question(question))
+
+
+def build_subagent_prompt(question: str, skills_context: str, mock_context: str) -> str:
     """Build the user prompt for a subagent."""
-    classification = classify_question(question)
-    filtered_context = _filter_skills_context(skills_context, classification)
+    filtered_context = filter_context_for_question(skills_context, question)
     return (
         f"## Question\n{question}\n\n"
         f"## Skills & Resources Context\n{filtered_context}\n\n"
@@ -275,14 +266,29 @@ def build_subagent_prompt(
     )
 
 
+def compact_draft(text: str, max_chars: int = 1800) -> str:
+    """Light compaction utility for lead prompts."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n\n[...truncated for cost control...]"
+
+
 def build_lead_prompt(
     question: str,
     sap_draft: str,
     general_draft: str,
     skills_context: str,
     agentic_draft: str | None = None,
+    *,
+    compact: bool = False,
 ) -> str:
     """Build the user prompt for the lead reconciliation agent."""
+    if compact:
+        sap_draft = compact_draft(sap_draft)
+        general_draft = compact_draft(general_draft)
+        if agentic_draft:
+            agentic_draft = compact_draft(agentic_draft)
+
     agentic_block = ""
     if agentic_draft:
         agentic_block = f"## Agentic Architecture Expert Draft\n{agentic_draft}\n\n"

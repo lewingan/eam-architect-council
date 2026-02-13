@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import anthropic
 
+from eam_council.council.llm import create_with_retry
 from eam_council.council.models import SubagentDraft
 from eam_council.council.prompts import (
     AGENTIC_ARCH_SUBAGENT_SYSTEM,
@@ -66,7 +67,8 @@ async def run_agentic_arch_subagent(
     else:
         user_prompt = build_subagent_prompt(question, skills_context, mock_context)
 
-    response = client.messages.create(
+    response = create_with_retry(
+        client,
         model=model,
         max_tokens=4096,
         system=AGENTIC_ARCH_SUBAGENT_SYSTEM,
