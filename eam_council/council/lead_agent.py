@@ -23,14 +23,17 @@ How should we architect a work order scheduling module for SAP EAM?
 
 ## Executive Summary
 The council recommends a hybrid architecture that leverages SAP PM's native scheduling \
-capabilities (maintenance plans, capacity planning) while introducing an external \
-constraint-based scheduling engine for advanced optimization. This approach combines \
-SAP's data authority with industry-standard scheduling best practices.
+capabilities via published OData APIs (API_MAINTORDER_SRV, API_MAINTENANCEPLAN_SRV) \
+while introducing an external constraint-based scheduling engine for advanced \
+optimization. This approach combines SAP's data authority with industry-standard \
+scheduling best practices.
 
 ## SAP EAM Perspective
-The SAP expert recommends building on SAP PM's scheduling framework (IP10/IP30, CM01) \
-with OData v4 APIs for real-time data access. Key SAP objects include AUFK, AFVC, and \
-CRHD tables. Integration via SAP BTP Integration Suite for event-driven patterns.
+The SAP expert recommends building on SAP PM's scheduling framework using the \
+published OData v4 APIs on the SAP Business Accelerator Hub. Key services include \
+API_MAINTORDER_SRV (work orders and operations), API_EQUIPMENT_SRV (asset master), \
+and API_WORKCENTER_SRV (resource/capacity data). Integration via SAP BTP Integration \
+Suite for event-driven patterns.
 
 ## General EAM Perspective
 The general EAM expert recommends a priority-driven, constraint-based scheduling engine \
@@ -54,6 +57,15 @@ rolling 2-week firm / 6-week planning horizon.
 - SAP PM <-> Scheduling Engine: OData v4 (pull), BTP events (push)
 - Scheduling Engine <-> UI: REST API (JSON)
 - Scheduling Engine <-> MRP: Async check for parts availability
+
+#### SAP API References
+| API Service | Entity Set | Purpose | Hub Link |
+|---|---|---|---|
+| API_MAINTORDER_SRV | MaintenanceOrder, MaintenanceOrderOperation | Work order and operation CRUD | https://api.sap.com/api/API_MAINTORDER/overview |
+| API_EQUIPMENT_SRV | Equipment | Asset master data | https://api.sap.com/api/API_EQUIPMENT/overview |
+| API_WORKCENTER_SRV | WorkCenter | Resource/capacity data | https://api.sap.com/api/API_WORKCENTER/overview |
+| API_MAINTENANCEPLAN_SRV | MaintenancePlan | Schedule definitions | https://api.sap.com/api/API_MAINTENANCEPLAN/overview |
+| API_FUNCLOCATION_SRV | FunctionalLocation | Plant hierarchy | https://api.sap.com/api/API_FUNCLOCATION/overview |
 
 ## Assumptions & Open Questions
 - [ ] S/4HANA 2023+ is the target platform
@@ -82,7 +94,10 @@ Purpose: Core optimization logic that the scheduling engine wraps as a service.
 
 
 async def run_council(
-    question: str, model: str, dry_run: bool = False
+    question: str,
+    model: str,
+    dry_run: bool = False,
+    search_enabled: bool = True,
 ) -> str:
     """Run the full council workflow and return the final output."""
     # 1. Load skills and mock data
@@ -91,12 +106,17 @@ async def run_council(
     mock_context = get_mock_context()
 
     # 2. Run subagents (parallel)
-    console.print("[dim]Consulting SAP EAM expert...[/dim]")
-    console.print("[dim]Consulting General EAM expert...[/dim]")
+    search_label = " (with web search)" if search_enabled else ""
+    console.print(f"[dim]Consulting SAP EAM expert{search_label}...[/dim]")
+    console.print(f"[dim]Consulting General EAM expert{search_label}...[/dim]")
 
     sap_draft, general_draft = await asyncio.gather(
-        run_sap_subagent(question, skills_context, mock_context, model, dry_run),
-        run_general_subagent(question, skills_context, mock_context, model, dry_run),
+        run_sap_subagent(
+            question, skills_context, mock_context, model, dry_run, search_enabled
+        ),
+        run_general_subagent(
+            question, skills_context, mock_context, model, dry_run, search_enabled
+        ),
     )
 
     console.print(f"[green]OK[/green] SAP expert responded ({len(sap_draft.content)} chars)")
