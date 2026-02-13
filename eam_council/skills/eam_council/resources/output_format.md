@@ -17,6 +17,20 @@ Every council response MUST follow this structure exactly:
 ## General EAM Perspective
 [Key points from the general EAM expert]
 
+## Agentic Architecture Perspective
+[Key points from the Agentic Architecture expert. If no agentic expert was invoked, state: "Not applicable for this question."]
+
+## Agent Suitability Decision
+- **Decision:** [Suitable | Not Suitable]
+- **Why (technical + business):** [Justify whether this use case should be implemented as an agent]
+- **If Not Suitable, Better Alternative:** [Describe the preferred non-agent architecture]
+
+## Impact & Worthwhile Assessment
+- **SAP EAM Expert View:** [High/Medium/Low impact and why]
+- **General EAM Expert View:** [High/Medium/Low impact and why]
+- **Agentic Architecture Expert View:** [High/Medium/Low impact and why]
+- **Overall Council Verdict:** [Is this worth building now? Why?]
+
 ## Unified Recommendation
 [Merged, reconciled recommendation with clear action items]
 
@@ -45,5 +59,9 @@ Every council response MUST follow this structure exactly:
 | 1 | ...      | ...       | ...                  |
 
 ## Next Agent To Build
-[Describe what the next logical agent or module to build would be to advance this architecture, including its inputs, outputs, and purpose]
+[Describe what the next logical agent or module to build would be to advance this architecture. MUST include: inputs, outputs, tool/API contracts, memory/state strategy, MVP scope, and acceptance criteria]
 ```
+
+Notes:
+- For agentic requests (e.g., design/build an EAM agent), `Agentic Architecture Perspective`, `Agent Suitability Decision`, and `Impact & Worthwhile Assessment` are mandatory.
+- For non-agentic requests, keep these sections present and mark them as not applicable.
