@@ -39,6 +39,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override the Claude model to use",
     )
+    parser.add_argument(
+        "--no-search",
+        action="store_true",
+        help="Disable web search for subagents (offline/cost-sensitive mode)",
+    )
     return parser.parse_args()
 
 
@@ -55,19 +60,26 @@ def main() -> None:
         )
 
     model = args.model or os.environ.get("EAM_MODEL", "claude-sonnet-4-20250514")
+    search_enabled = not args.no_search
 
     console.print(
         Panel(
             f"[bold]EAM Architecture Council[/bold]\n"
             f"Mode: {'DRY-RUN' if dry_run else 'LIVE'}\n"
-            f"Model: {model}",
+            f"Model: {model}\n"
+            f"Web Search: {'ON' if search_enabled else 'OFF'}",
             title="Council Session",
         )
     )
     console.print(f"\n[bold]Question:[/bold] {args.question}\n")
 
     result = asyncio.run(
-        run_council(question=args.question, model=model, dry_run=dry_run)
+        run_council(
+            question=args.question,
+            model=model,
+            dry_run=dry_run,
+            search_enabled=search_enabled,
+        )
     )
 
     # Print to stdout

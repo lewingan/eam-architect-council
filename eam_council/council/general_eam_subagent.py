@@ -6,9 +6,11 @@ import anthropic
 
 from eam_council.council.models import SubagentDraft
 from eam_council.council.prompts import (
+    GENERAL_EAM_SUBAGENT_SEARCH_ADDENDUM,
     GENERAL_EAM_SUBAGENT_SYSTEM,
     build_subagent_prompt,
 )
+from eam_council.council.web_search import GENERAL_WEB_SEARCH_TOOL, extract_text_from_response
 
 DRY_RUN_RESPONSE = """\
 ## General EAM Expert Draft
@@ -49,6 +51,7 @@ async def run_general_subagent(
     mock_context: str,
     model: str,
     dry_run: bool = False,
+    search_enabled: bool = True,
 ) -> SubagentDraft:
     """Run the General EAM subagent and return its draft."""
     if dry_run:
@@ -61,14 +64,22 @@ async def run_general_subagent(
     client = anthropic.Anthropic()
     user_prompt = build_subagent_prompt(question, skills_context, mock_context)
 
-    response = client.messages.create(
+    system_prompt = GENERAL_EAM_SUBAGENT_SYSTEM
+    if search_enabled:
+        system_prompt += GENERAL_EAM_SUBAGENT_SEARCH_ADDENDUM
+
+    kwargs: dict = dict(
         model=model,
         max_tokens=4096,
-        system=GENERAL_EAM_SUBAGENT_SYSTEM,
+        system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
+    if search_enabled:
+        kwargs["tools"] = [GENERAL_WEB_SEARCH_TOOL]
 
-    content = response.content[0].text
+    response = client.messages.create(**kwargs)
+
+    content = extract_text_from_response(response)
     return SubagentDraft(
         agent_name="General EAM Expert",
         perspective="Industry-standard",

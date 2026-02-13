@@ -1,7 +1,13 @@
 entities:
   work_order:
     description: A formal maintenance task instruction
-    sap_table: AUFK
+    sap_api:
+      odata_service: API_MAINTORDER_SRV
+      odata_entity_set: MaintenanceOrder
+      api_hub_url: https://api.sap.com/api/API_MAINTORDER/overview
+    sap_internals:
+      legacy_table: AUFK
+      transactions: [IW31, IW32, IW33]
     fields:
       - name: order_id
         type: string
@@ -35,7 +41,13 @@ entities:
 
   functional_location:
     description: A point in the technical plant hierarchy
-    sap_table: IFLO
+    sap_api:
+      odata_service: API_FUNCLOCATION_SRV
+      odata_entity_set: FunctionalLocation
+      api_hub_url: https://api.sap.com/api/API_FUNCLOCATION/overview
+    sap_internals:
+      legacy_table: IFLO
+      transactions: [IL01, IL02, IL03]
     fields:
       - name: func_loc_id
         type: string
@@ -54,7 +66,13 @@ entities:
 
   equipment:
     description: An individual physical asset
-    sap_table: EQUI
+    sap_api:
+      odata_service: API_EQUIPMENT_SRV
+      odata_entity_set: Equipment
+      api_hub_url: https://api.sap.com/api/API_EQUIPMENT/overview
+    sap_internals:
+      legacy_table: EQUI
+      transactions: [IE01, IE02, IE03]
     fields:
       - name: equipment_id
         type: string
@@ -76,7 +94,13 @@ entities:
 
   work_center:
     description: A resource group for performing maintenance
-    sap_table: CRHD
+    sap_api:
+      odata_service: API_WORKCENTER_SRV
+      odata_entity_set: WorkCenter
+      api_hub_url: https://api.sap.com/api/API_WORKCENTER/overview
+    sap_internals:
+      legacy_table: CRHD
+      transactions: [CR01, CR02, CR03]
     fields:
       - name: work_center_id
         type: string
@@ -92,7 +116,13 @@ entities:
 
   operation:
     description: A single task within a work order
-    sap_table: AFVC
+    sap_api:
+      odata_service: API_MAINTORDER_SRV
+      odata_entity_set: MaintenanceOrderOperation
+      api_hub_url: https://api.sap.com/api/API_MAINTORDER/overview
+    sap_internals:
+      legacy_table: AFVC
+      transactions: [IW32]
     fields:
       - name: operation_id
         type: string
@@ -112,7 +142,13 @@ entities:
 
   maintenance_plan:
     description: A recurring schedule definition
-    sap_table: MPOS
+    sap_api:
+      odata_service: API_MAINTENANCEPLAN_SRV
+      odata_entity_set: MaintenancePlan
+      api_hub_url: https://api.sap.com/api/API_MAINTENANCEPLAN/overview
+    sap_internals:
+      legacy_table: MPOS
+      transactions: [IP01, IP02, IP10]
     fields:
       - name: plan_id
         type: string

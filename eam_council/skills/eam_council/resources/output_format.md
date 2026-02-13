@@ -30,6 +30,11 @@ Every council response MUST follow this structure exactly:
 ### Integration Points
 - [System-to-system interfaces]
 
+#### SAP API References
+| API Service | Entity Set | Purpose | Hub Link |
+|---|---|---|---|
+| [OData service name] | [Entity set name] | [What it is used for] | [api.sap.com link] |
+
 ## Assumptions & Open Questions
 - [ ] [Assumption or open question 1]
 - [ ] [Assumption or open question 2]
