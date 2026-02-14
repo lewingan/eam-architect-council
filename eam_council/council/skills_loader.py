@@ -11,6 +11,23 @@ def _iter_skill_dirs(skills_root: Path):
             yield skill_dir
 
 
+def _get_support_dir(skill_dir: Path) -> Path | None:
+    """Return the primary support directory for a skill.
+
+    Prefer ``references/`` for Claude-skill style packaging, but keep backward
+    compatibility with existing ``resources/`` directories.
+    """
+    references_dir = skill_dir / "references"
+    if references_dir.is_dir():
+        return references_dir
+
+    resources_dir = skill_dir / "resources"
+    if resources_dir.is_dir():
+        return resources_dir
+
+    return None
+
+
 def list_skill_inventory(skills_root: Path | None = None) -> dict[str, list[str]]:
     """Return skill -> resource-file mapping for routing decisions."""
     if skills_root is None:
@@ -19,9 +36,9 @@ def list_skill_inventory(skills_root: Path | None = None) -> dict[str, list[str]
     inventory: dict[str, list[str]] = {}
     for skill_dir in _iter_skill_dirs(skills_root):
         resources: list[str] = []
-        resources_dir = skill_dir / "resources"
-        if resources_dir.is_dir():
-            resources = [p.name for p in sorted(resources_dir.iterdir()) if p.is_file()]
+        support_dir = _get_support_dir(skill_dir)
+        if support_dir is not None:
+            resources = [p.name for p in sorted(support_dir.iterdir()) if p.is_file()]
         inventory[skill_dir.name] = resources
     return inventory
 
@@ -39,9 +56,9 @@ def load_all_skills(skills_root: Path | None = None) -> str:
         skill_text = skill_md.read_text(encoding="utf-8")
         sections.append(f"=== SKILL: {skill_dir.name} ===\n{skill_text}")
 
-        resources_dir = skill_dir / "resources"
-        if resources_dir.is_dir():
-            for res_file in sorted(resources_dir.iterdir()):
+        support_dir = _get_support_dir(skill_dir)
+        if support_dir is not None:
+            for res_file in sorted(support_dir.iterdir()):
                 if res_file.is_file():
                     content = res_file.read_text(encoding="utf-8")
                     sections.append(
@@ -75,12 +92,12 @@ def load_selected_skills(
         skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
         sections.append(f"=== SKILL: {skill_name} ===\n{skill_text}")
 
-        resources_dir = skill_dir / "resources"
-        if not resources_dir.is_dir():
+        support_dir = _get_support_dir(skill_dir)
+        if support_dir is None:
             continue
 
         include_for_skill = None if include_resources is None else include_resources.get(skill_name)
-        for res_file in sorted(resources_dir.iterdir()):
+        for res_file in sorted(support_dir.iterdir()):
             if not res_file.is_file():
                 continue
             if include_for_skill is not None and res_file.name not in include_for_skill:
